@@ -1,6 +1,7 @@
 ;;
 ;; ssh
 ;;
+(require 'comint)
 (defvar ssh/default-host "fsf.org"
   "Default if you just hit enter for hostname")
 
@@ -13,6 +14,11 @@
 (defvar ssh/user-history-file
   (expand-file-name "ssh-user-history" user-emacs-directory)
   "File used to persist `ssh/user-history' across Emacs sessions.")
+
+(defvar ssh/post-connect-hook nil
+  "Hook run in a newly created SSH comint buffer.
+Use this to extend SSH buffer setup from optional libraries.
+The hook runs inside `with-current-buffer' on the new buffer.")
 
 (defvar ssh/host-history '()
   "Non-persistent history of hosts used with SSH connections.")
@@ -107,7 +113,8 @@ Removes duplicates and empty strings before writing."
       ;; HP iLO needs a carriage return instead of newline.
       (if (string-match "\.ilo$" remote)
 	  (setq-local comint-input-sender 'ssh/comint-cr-send))
-      (setq-local dabbrev-abbrev-char-regexp "\\sw\\|\\s_\\|[-._,]"))))
+      (setq-local dabbrev-abbrev-char-regexp "\\sw\\|\\s_\\|[-._,]")
+      (run-hooks 'ssh/post-connect-hook))))
 
 (defun ssh/eat (prefix)
   "Open SSH connection with host completion inside an EAT terminal.
