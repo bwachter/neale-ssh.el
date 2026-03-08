@@ -7,6 +7,16 @@
 (defvar ssh/frequent-hosts '("host1.fsf.org")
   "List of hosts to add to completion options")
 
+(defvar ssh/user-history '()
+  "History of usernames used with SSH connections, persisted across sessions.")
+
+(defvar ssh/user-history-file
+  (expand-file-name "ssh-user-history" user-emacs-directory)
+  "File used to persist `ssh/user-history' across Emacs sessions.")
+
+(defvar ssh/host-history '()
+  "Non-persistent history of hosts used with SSH connections.")
+
 (defun ssh/remove-known-host (arg)
   "Prompt to select and remove a host from ssh known_hosts file.
 
@@ -63,7 +73,23 @@ With prefix ARG, prompt for an alternative known_hosts file path."
                 (push h hosts)))))))
     (delete-dups hosts)))
 
-(setq ssh/host-history '())
+(defun ssh/load-user-history ()
+  "Load username history from `ssh/user-history-file'."
+  (when (file-readable-p ssh/user-history-file)
+    (with-temp-buffer
+      (insert-file-contents ssh/user-history-file)
+      (setq ssh/user-history (split-string (buffer-string) "\n" t)))))
+
+(defun ssh/save-user-history ()
+  "Persist `ssh/user-history' to `ssh/user-history-file'.
+Removes duplicates and empty strings before writing."
+  (let ((clean (delete "" (delete-dups (copy-sequence ssh/user-history)))))
+    (setq ssh/user-history clean)
+    (with-temp-file ssh/user-history-file
+      (insert (mapconcat #'identity clean "\n")))))
+
+(ssh/load-user-history)
+
 (defun ssh (prefix remote)
   (interactive
    (list
@@ -115,7 +141,12 @@ It's recommended for calling functions to support a prefix argument, and pass
 the prefix as `ask-user'"
   (interactive)
   (let* ((hosts (append ssh/frequent-hosts (ssh/config-hosts) (ssh/known-hosts)))
-         (user (when ask-user (read-string "Username: ")))
+         (user (when ask-user
+                 (let ((u (completing-read "Username: " ssh/user-history
+                                           nil nil nil 'ssh/user-history)))
+                   (unless (string= u "")
+                     (ssh/save-user-history)
+                     u))))
          (host (completing-read prompt hosts nil nil "" 'ssh/host-history))
          (host (if (string= host "") ssh/default-host host)))
     (if user (format "%s@%s" user host) host)))
